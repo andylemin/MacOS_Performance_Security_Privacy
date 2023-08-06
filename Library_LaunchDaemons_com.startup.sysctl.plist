@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- DISABLE SIP TO USE: macOS Recovery > Utilities > Terminal > `csrutil disable` > Reboot -->
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>com.startup.sysctl</string>
+        <key>LaunchOnlyOnce</key>
+        <true/>
+        <key>StandardErrorPath</key>
+            <string>/private/tmp/sysctl.err</string>
+        <key>StandardOutPath</key>
+            <string>/private/tmp/sysctl.out</string>
+        <key>ProgramArguments</key>
+        <array>
+            <string>/usr/sbin/sysctl</string>
+            <string>-w</string>
+            <string>kern.maxfiles=524288</string>
+            <string>kern.maxfilesperproc=524288</string>
+            <string>net.inet.tcp.mssdflt=1460</string>
+            <string>net.inet.tcp.delayed_ack=3</string>
+            <string>net.inet.tcp.tso=1</string>
+            <string>net.inet.tcp.cubic_fast_convergence=1</string>
+            <string>net.inet.tcp.cubic_tcp_friendliness=0</string>
+            <string>net.inet.tcp.win_scale_factor=8</string>
+            <string>net.inet.tcp.local_slowstart_flightsize=16</string>
+            <string>net.inet.tcp.randomize_ports=1</string>
+            <string>net.inet.ip.redirect=0</string>
+            <string>net.inet.tcp.recvspace=262144</string>
+            <string>net.inet.tcp.sendspace=262144</string>
+            <string>net.inet.tcp.autorcvbufmax=33554432</string>
+            <string>net.inet.tcp.autosndbufmax=33554432</string>
+            <string>kern.ipc.maxsockbuf=16777216</string>
+        </array>
+        <key>RunAtLoad</key>
+        <true/>
+    </dict>
+</plist>
