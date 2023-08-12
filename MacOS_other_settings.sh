@@ -3,6 +3,7 @@
 
 # some useful settings, mostly cribbed from https://github.com/mathiasbynens/dotfiles/blob/master/.osx
 
+# Disable window animations
 defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool NO
 
 # Enable full keyboard access for all controls (e.g. enable Tab in modal dialogs)
@@ -73,13 +74,13 @@ echo "Checking if a configuration profile is configured for Apple Diagnostics; (
 sudo /usr/libexec/PlistBuddy -c "Add :AutoSubmit bool NO" "/Library/Application Support/CrashReporter/DiagnosticMessagesHistory.plist"
 sudo /usr/libexec/PlistBuddy -c "Add :ThirdPartyDataSubmit bool NO" "/Library/Application Support/CrashReporter/DiagnosticMessagesHistory.plist"
 
-# Show the ~/Library folder
+# Show the ~/Library folder by default
 chflags nohidden ~/Library
 
 # Don't use native OSX full screen mode with iTerm2 (annoying animations)
 defaults write com.googlecode.iterm2 UseLionStyleFullscreen -bool false
 
-# prompt on quit in iTerm2
+# Prompt on quit in iTerm2
 defaults write com.googlecode.iterm2 PromptOnQuit -bool true
 # Use visual bell in iTerm2
 defaults write com.googlecode.iterm2 "Silence Bell" -bool false
@@ -98,3 +99,42 @@ defaults write org.vim.MacVim MMNativeFullScreen -int 0
 
 # Kill affected applications
 for app in Finder Dock SystemUIServer Safari Mail; do killall "$app"; done
+
+# DISABLING AirDrop; Apple advised Meter, UCLA, and other vendors, networking issues were caused by the “Apple Wireless Direct Link” interface, which helps power features like AirDrop and AirPlay:
+# https://gist.github.com/pythoninthegrass/8073e5e3b24f385c9d9b712f6f243982
+echo "Disabling 'Apple Wireless Direct Link' Interface (Handoff/Continuity/AirDrop/AirPlay etc)"
+sudo ifconfig awdl0 down
+echo "To make AirDrop Interface disable permanent. See; https://github.com/jamestut/awdlkiller"
+
+echo "Installing Powerline fonts"
+cd ~
+git clone https://github.com/powerline/fonts.git
+cd fonts
+./install.sh
+cd ..
+rm -rf fonts
+
+echo "Deleting all local timemachine snapshots (does not impact external backups)"
+for d in $(tmutil listlocalsnapshotdates | grep "-"); do sudo tmutil deletelocalsnapshots $d; done
+
+echo "Deleting all local temp Caches"
+sudo rm -rf ~/Library/Caches/*
+
+echo "Deleting all local logs"
+sudo rm -rf ~/Library/Logs/*
+
+xcode-select --install
+sudo xcode-select --reset
+
+echo "Disabling SpotLight"
+sudo mdutil -a -i off
+
+echo "Disabling Brew Analytics"
+brew analytics off
+
+echo "Run system profiler with; sudo /usr/sbin/system_profiler"
+echo "Clean up syslog and aslmanager etc; sudo rm -rf /var/log/asl/*"
+echo "Enable "Displays have separate spaces" in settings, so menubars for applications stay in same window as the Application.."
+
+echo "TODO - Delete any found JAVA (or disable - Java can be disabled in System Preferences)"
+echo "TODO - Remove any found Flash Player"

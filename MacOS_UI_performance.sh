@@ -36,8 +36,8 @@ defaults write com.apple.dock launchanim -bool false
 defaults write ca.brawer.uBar singleWindowUsesTitle -bool YES
 # Show the window count in grouped app tiles. Use NO instead of YES to hide the count.
 defaults write ca.brawer.uBar showWindowCount -bool YES
-# Use the app icon for windows. Use NO instead of YES to use the document icon when possible.
-defaults write ca.brawer.uBar useAppIconForWindows -bool YES
+# Use the document icon for windows. Use YES instead of NO to use the app icon when possible.
+defaults write ca.brawer.uBar useAppIconForWindows -bool NO
 # Practically hide the Apple Dock by making it’s auto-hide delay 1000 seconds.
 defaults write com.apple.dock autohide-delay -float 1000 && killall Dock
 # defaults delete com.apple.dock autohide-delay && killall Dock   # Restore Apple Dock

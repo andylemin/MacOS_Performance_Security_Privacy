@@ -39,41 +39,5 @@ echo
 echo "Limits"
 limit
 
-# DISABLING AirDrop; Apple advised Meter, UCLA, and other vendors, networking issues were caused by the “Apple Wireless Direct Link” interface, which helps power features like AirDrop and AirPlay: 
-# https://gist.github.com/pythoninthegrass/8073e5e3b24f385c9d9b712f6f243982
-echo "DISABLING AirDrop Interface"
-sudo ifconfig awdl0 down
-echo "TODO - Make AirDrop Interface disable permanent. See; https://github.com/jamestut/awdlkiller"
-
-echo "Installing Powerline fonts"
-cd ~
-git clone https://github.com/powerline/fonts.git
-cd fonts
-./install.sh
-cd ..
-rm -rf fonts
-
-echo "Deleting all local timemachine snapshots"
-for d in $(tmutil listlocalsnapshotdates | grep "-"); do sudo tmutil deletelocalsnapshots $d; done
-
-echo "Deleting all local temp Caches"
-sudo rm -rf ~/Library/Caches/*
-
-xcode-select --install
-sudo xcode-select --reset
-
-echo "Disabling SpotLight"
-sudo mdutil -a -i off
-
-echo "Disabling Brew Analytics"
-brew analytics off
-
-echo "TODO - Delete any found JAVA (or disable - Java can be disabled in System Preferences)"
-echo "TODO - Remove any found Flash Player"
-
 echo "NOTICE; You can Re-enable SIP now!!! (reboot, cmd# + R, csrutil enable)"
 sleep 5
-
-echo "Run system profiler with; sudo /usr/sbin/system_profiler"
-echo "Clean up syslog and aslmanager etc; sudo rm -rf /var/log/asl/*"
-echo "Enable "Displays have separate spaces" in settings, so menubars for applications stay in same window as the Application.."
