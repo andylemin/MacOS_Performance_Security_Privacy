@@ -127,7 +127,7 @@ Significantly increases keyboard speed. Safe for most use cases.
 Applies common MacOS general optimisation settings.\
 Adds powerline fonts (See https://ohmyz.sh/).\
 Adds Apple X-Code runtime libraries.\
-Deletes local timemachine snapshots (does not break real time machine backups), and local caches\
+Deletes local timemachine snapshots (does not impact external disk time machine backups), and local caches\
 Deletes local temp caches and application logs\
 Warning; Disables Spotlight (make sure you have alternative like Alfred).\
 Warning; Disables awdl0 interface (Handoff/Continuity/AirDrop/AirPlay etc).
