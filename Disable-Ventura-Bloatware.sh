@@ -1,6 +1,6 @@
 #!/bin/sh
 
-## Full Procedure;
+## Procedure;
 #0) Take note of Agents and Daemons currently running; `launchctl list | grep -v "\-\t0"`
 #1) Reboot in Recovery mode (Eg; https://www.lifewire.com/restart-a-mac-into-recovery-mode-5184142)
 #2) Open 'Terminal' application in Recovery mode
@@ -9,44 +9,17 @@
 #5) Identify your system disk identifier - (Eg, 'disk3s3' for Volume 'Macintosh HD') in the diskutil output under the '(synthesized)' set
 #6) Mount volume; `diskutil mount disk3s3` (replace 'disk3s3' with your own disk identifier if different)
 #7) Make writable; `mount -uw /Volumes/Macintosh\ HD` (replace 'Macintosh\ HD' with your disk volume name)
-#8) Update `${MYROOTDISK}` variable in the `Disable-Ventura-Bloatware.sh` script (~Line 59), and in the commands below (steps 11, 12), if different from (`/Volumes/Macintosh\ HD`)
+#8) Update `${MYROOTDISK}` variable in the `Disable-Ventura-Bloatware.sh` script (~Line 32), and in the commands below (steps 11, 12), if different from (`/Volumes/Macintosh\ HD`)
 #9) Make script executable; `chmod 775 ./Disable-Ventura-Bloatware.sh` and execute `./Disable-Ventura-Bloatware.sh` (in Recovery Mode Terminal)
 #10) Check existing snapshots; `diskutil apfs listSnapshots disk3s3` (change disk and partition to yours)
 #11) Create new disk snapshot; `/Volumes/Macintosh\ HD/System/Library/Filesystems/apfs.fs/Contents/Resources/apfs_systemsnapshot -s "Custom1" -v /Volumes/Macintosh\ HD` (replace 'Macintosh\ HD' if different)
 #12) Tag new snapshot bootable; `/Volumes/Macintosh\ HD/System/Library/Filesystems/apfs.fs/Contents/Resources/apfs_systemsnapshot -r "Custom1" -v /Volumes/Macintosh\ HD` (replace 'Macintosh\ HD' if different)
+#OR 11 & 12) `bless --mount /Volumes/Macintosh\ HD --bootefi --create-snapshot` (I have not confirmed if there is any difference between this command and 11+12 - They seem to work the same so far)
 #13) Check snapshots; `diskutil apfs listSnapshots disk3s3` (change disk and partition to yours) - Should show your new customised SSV Volume is the new MacOS Boot image
 #14) Reboot in Normal mode (first reboot with new snapshot might take upto 10 minutes)
 #15) Verify LaunchAgents and Daemons are now stopped; `launchctl list | grep -v "\-\t0"`
-#16) Open MacOS Log Console (`open -a Console`), and use your system for a while (test everything you normally use).
-#Perform common activities to exercise all needed features, and watch for issues in Console.
-#If things are not working as desired, you will need to experiment and try restoring Agents and Daemons one by one.
-#You can also try deleting any related app/user plist files from `~/Library/Preferences/` and rebooting, to restore an Apps defaults settings. (Eg, `rm ~/Library/Preferences/com.apple.AppStore.plist`)
-#
-#Restoring functionality; follow steps 1,6,7 again, removing `.bak` extension from wanted .plists, restore launchctl loading if Agent, follow steps 11-14 (Increment 'CustomX') to commit the restored plists.
-#Eg to restore Agents;
-#```
-#Steps 1,6,7
-#mv ${MYROOTDISK}/System/Library/LaunchAgents/<AgentToRestore>.plist.bak ${MYROOTDISK}/System/Library/LaunchAgents/<AgentToRestore>.plist
-#launchctl enable user/0/<AgentToRestore>    # Root shell user
-#launchctl enable gui/501/<AgentToRestore>   # UI Login User
-#launchctl enable user/501/<AgentToRestore>  # Shell Login User
-#launchctl bootstrap user/0/<AgentToRestore>    # Root shell user
-#launchctl bootstrap gui/501/<AgentToRestore>   # UI Login User
-#launchctl bootstrap user/501/<AgentToRestore>  # Shell Login User
-#launchctl start user/0/<AgentToRestore>     # Root shell user
-#launchctl start gui/501/<AgentToRestore>    # UI Login User
-#launchctl start user/501/<AgentToRestore>   # Shell Login User
-#Steps 11-14 (Using Custom2 etc)
-#```
-#Eg to restore Daemons;
-#```
-#Steps 1,6,7
-#mv ${MYROOTDISK}/System/Library/LaunchDaemons/<DaemonToRestore>.plist.bak ${MYROOTDISK}/System/Library/LaunchDaemons/<DaemonToRestore>.plist
-#Steps 11-14 (Using Custom2 etc)
-#```
-#When happy, update the script with your personal changes (for future you), and share fixes for others here..\
-#17) Once everything is working as desired (and the things you don't use are gone), reboot into Recovery mode again
-#18) Re-enable SIP `csrutil authenticated-root enable`. Reboot and re-enable disk Encryption/FileVault, and Lockdown mode (if used)
+
+# * See README.md for all remaining steps *
 
 # Agents not to disable
 #Disabling `com.apple.speech.speechdatainstallerd` `com.apple.speech.speechsynthesisd` `com.apple.speech.synthesisserver` will freeze Edit menus.\
@@ -68,8 +41,8 @@ fi
 # TODO Build launchctl man page extracts for Ventura https://gist.github.com/dmattera/883a4457b67534df795cdd0fa1651a26
 
 # Launch Agents
-# TODO Bluetooth is excluded below but Bluetooth is not working. Console logs show; <Notice>: service inactive: com.apple.bluetoothd (find dependency)
-#  Console logs seem to show bluetoothd trying to connect to com.apple.SharingServices which is likely part of com.apple.sharingd
+# TODO Testing - When Bluetooth is excluded (from being disabled by commenting 'TODISABLE+=( "${LA_BLUETOOTH[@]}" )'), you also need to stop com.apple.sharingd from being disabled.
+#  Console logs show bluetoothd trying to connect to com.apple.SharingServices which is likely part of com.apple.sharingd
 LA_BLUETOOTH=('com.apple.bluetoothuserd')
 
 LA_QUICKLOOK=('com.apple.quicklook' \
@@ -122,7 +95,7 @@ LA_FAMILYSYNC=('com.apple.familycircled' \
 'com.apple.UsageTrackingAgent')
 
 LA_BLOAT=('com.apple.financed' \
-#'com.apple.analyticsd' \  # No longer in Ventura (suspect this is was renamed/hidden to obfuscate)
+#'com.apple.analyticsd' \  # No longer in Ventura
 'com.apple.gamed' \
 'com.apple.newsd' \
 'com.apple.weatherd' \
@@ -222,9 +195,9 @@ LA_OTHER=('com.apple.networkserviceproxy-osx' \
 'com.apple.cmio.ContinuityCaptureAgent')
 
 TODISABLE=()
-#TODISABLE+=( "${LA_BLUETOOTH[@]}" )    # Do not disable if you use Bluetooth headphones/keyboards/controllers etc
-#TODISABLE+=( "${LA_QUICKLOOK[@]}" )    # Do not disable if you use QuickLook (image/video previews)
-#TODISABLE+=( "${LA_TIMEMACHINE[@]}" )  # Do not disable if you use Time Machine backups
+TODISABLE+=( "${LA_BLUETOOTH[@]}" )    # Do not disable if you use Bluetooth headphones/keyboards/controllers etc
+# TODISABLE+=( "${LA_QUICKLOOK[@]}" )    # Do not disable if you use QuickLook (image/video previews)
+# TODISABLE+=( "${LA_TIMEMACHINE[@]}" )  # Do not disable if you use Time Machine backups
 TODISABLE+=( "${LA_CLOUD[@]}" )
 TODISABLE+=( "${LA_MDM[@]}" )
 TODISABLE+=( "${LA_ADVERTISING[@]}" )
@@ -244,7 +217,7 @@ TODISABLE+=( "${LA_IDENTITYDATA[@]}" )
 TODISABLE+=( "${LA_MUSIC[@]}" )
 TODISABLE+=( "${LA_APPLETV[@]}" )
 TODISABLE+=( "${LA_PAYMENTS[@]}" )
-TODISABLE+=( "${LA_AUTOMATIONS[@]}" )
+# TODISABLE+=( "${LA_AUTOMATIONS[@]}" )
 TODISABLE+=( "${LA_SPOTLIGHT[@]}" )    # Make sure you have an alternative like LaunchBar
 TODISABLE+=( "${LA_AIRPLAY[@]}" )      # Do not disable if you use AirPlay
 TODISABLE+=( "${LA_OTHER[@]}" )
@@ -326,7 +299,6 @@ LD_OTHER=('com.apple.locationd' \
 'com.apple.osanalytics.osanalyticshelper' \
 #'com.apple.CoreLocationAgent' \  # No longer in Ventura
 'com.apple.AirPlayXPCHelper' \
-'com.apple.dhcp6d' \
 'com.apple.RemoteDesktop.PrivilegeProxy' \
 'com.apple.familycontrols' \
 'com.apple.findmymacmessenger' \
@@ -336,9 +308,8 @@ LD_OTHER=('com.apple.locationd' \
 #'com.apple.ftpd' \  # No longer in Ventura
 'com.apple.GameController.gamecontrollerd' \
 #'com.apple.geod' \  # No longer in Ventura
-'com.apple.netbiosd' \
-'com.apple.nsurlsessiond' \
 #'com.apple.protectedcloudstorage.protectedcloudkeysyncing' \  # No longer in Ventura
+'com.apple.netbiosd' \
 'com.apple.rapportd' \
 #'com.apple.security.cloudkeychainproxy3' \  # No longer in Ventura
 #'com.apple.siri.morphunassetsupdaterd' \  # No longer in Ventura
