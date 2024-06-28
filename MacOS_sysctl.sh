@@ -1,11 +1,19 @@
 #!/usr/bin/env ksh
 
-# From MacOS Catalina 10.15.3, /etc/sysctl.conf values are no longer respected (set using plists instead)
-
-read -p "Have you disabled SIP? [y/n]" recmode
+echo "From MacOS Catalina 10.15.3, /etc/sysctl.conf values are no longer respected. You need to set sysctls via plists instead (this script does this)"
+echo
+echo "Updating sysctl values on Ventura is generally not required anymore as Apple have already provided sane defaults to achieve 10Gbps performance"
+echo "Make sure you have read the changes in 'Library_LaunchDaemons_com.startup.sysctl.plist'"
+echo "In particular make sure you understand 'net.inet.tcp.tso' & 'kern.ipc.nmbclusters' and configure for your use case (info in README.md). These have the most impact."
+read -r -p "Are you sure you want to increase sysctl values? [y/n]" iamsure
+if [[ "$iamsure" != "y" ]]; then
+    exit
+fi
+echo
+read -r -p "Have you disabled SIP? [y/n]" recmode
 if [[ "$recmode" != "y" ]]; then
     echo "Disable SIP first (reboot, cmd# + R, 'csrutil disable')"
-    echo "Re-nable SIP when done (reboot, cmd# + R, 'csrutil enable')"
+    echo "Re-enable SIP when done (reboot, cmd# + R, 'csrutil enable') - Only if not using Disable-VenturaBloatware.sh"
     exit
 fi
 
@@ -15,6 +23,14 @@ fi
 #             <string>kern.sysv.shmmni=32</string>
 #             <string>kern.sysv.shmseg=8</string>
 #             <string>kern.sysv.shmall=1024</string>
+
+# kern.maxvnodes (old macs default 66560, Ventura default 263168, serverperfmode default 300000)
+# kern.maxproc (old macs default 1064, Ventura default 16000, serverperfmode default 5000)
+# kern.maxfilesperproc (old macs default 10240, Ventura default 245760, serverperfmode default 150000)
+# kern.maxprocperuid (old macs default 709, Ventura default 10666, serverperfmode default 3750)
+# kern.ipc.maxsockbuf (old macs default 4194304, Ventura default 8388608, serverperfmode default 8388608)
+# kern.ipc.somaxconn (old macs default 128, Ventura default 128, serverperfmode default 1024)
+# kern.ipc.nmbclusters (old macs default 32768, Ventura default 262144, serverperfmode default 65536)
 
 echo "Ventura - Updating /Library/LaunchDaemons/com.startup.sysctl.plist"
 sudo cp -f ./Library_LaunchDaemons_com.startup.sysctl.plist /Library/LaunchDaemons/com.startup.sysctl.plist
@@ -34,8 +50,7 @@ plutil /Library/LaunchDaemons/limit.maxfiles.plist
 sudo launchctl bootstrap system /Library/LaunchDaemons/limit.maxfiles.plist
 echo
 
-echo "System Limits"
+echo "Current System Limits"
 limit
 
-echo "NOTICE; You can Re-enable SIP now!!! (reboot, cmd# + R, csrutil enable)"
-sleep 5
+echo "NOTICE; You can Re-enable SIP now if used! (reboot, cmd# + R, csrutil enable)"

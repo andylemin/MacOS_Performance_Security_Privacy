@@ -18,23 +18,22 @@
             <string>kern.maxfiles=524288</string>
             <string>kern.maxfilesperproc=524288</string>
             <string>net.inet.tcp.mssdflt=1300</string>
-            <string>net.inet.tcp.delayed_ack=3</string>
+            <string>net.inet.tcp.delayed_ack=1</string>
             <string>net.inet.tcp.do_ack_compression=0</string>
             <string>net.inet.tcp.tso=0</string>
             <string>net.inet.tcp.cubic_fast_convergence=1</string>
-            <string>net.inet.tcp.cubic_tcp_friendliness=1</string>
-            <string>net.inet.tcp.win_scale_factor=8</string>
-            <string>net.inet.tcp.local_slowstart_flightsize=12</string>
+            <string>net.inet.tcp.cubic_tcp_friendliness=0</string>
+            <string>net.inet.tcp.win_scale_factor=6</string>
+            <string>net.inet.tcp.local_slowstart_flightsize=16</string>
             <string>net.inet.tcp.randomize_ports=1</string>
             <string>net.inet.ip.portrange.first=32768</string>
             <string>net.inet.ip.portrange.hifirst=32768</string>
             <string>net.inet.ip.redirect=0</string>
-            <string>net.inet.tcp.recvspace=262144</string>
-            <string>net.inet.tcp.sendspace=262144</string>
-            <string>net.inet.tcp.autorcvbufmax=33554432</string>
-            <string>net.inet.tcp.autosndbufmax=33554432</string>
-            <string>kern.ipc.maxsockbuf=8388608</string>
-            <string>kern.ipc.nmbclusters=262144</string>
+            <string>net.inet.tcp.autorcvbufmax=8388608</string>
+            <string>net.inet.tcp.autosndbufmax=8388608</string>
+            <string>net.inet.tcp.autosndbufinc=16384</string>
+            <string>kern.ipc.maxsockbuf=16777216</string>
+            <string>kern.ipc.nmbclusters=524288</string>
         </array>
         <key>RunAtLoad</key>
         <true/>
