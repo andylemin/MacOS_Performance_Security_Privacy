@@ -159,16 +159,16 @@ When happy, update the script with your personal changes (for future you), and s
 ##### Post customisation changes (Secure your system)
 17) Once everything is working as desired (and the things you don't use are gone), reboot into Recovery mode again, and set a 'Firmware password' (Intel Macs only). Apple Silicon Macs already ask for your password to access Recovery mode / change boot disk. Reboot back into main OS.
 * WARNING; Before the next steps, make sure you have created a secondary admin account (required for this to work)
-19) Create per-User secure volume; Open Disk Utility (Ensure View -> 'Show All Devices' is enabled), Select 'Macintosh HD' (under Container disk), right-click 'Add APFS Volume', Select APFS (Case-senstiive, Encrypted). Mount the new volume.
+18) Create per-User secure volume; Open Disk Utility (Ensure View -> 'Show All Devices' is enabled), Select 'Macintosh HD' (under Container disk), right-click 'Add APFS Volume', Select APFS (Case-senstiive, Encrypted). Mount the new volume.
 NB; If you really need _true_ security of your home disk at rest, you will need to investigate tools like OpenZFS/VeraCrypt which encrypt volume data before being sent to the SSD hardware (userland encryption rather than hardware encryption).
-20) Setup per-User secure volume; Create a folder in your new volume, and restrict the permissions; Eg `mkdir /Volumes/<Per-User Volume name>/<username> && chmod 700 /Volumes/<Per-User Volume name>/<username>`.
+19) Setup per-User secure volume; Create a folder in your new volume, and restrict the permissions; Eg `mkdir /Volumes/<Per-User Volume name>/<username> && chmod 700 /Volumes/<Per-User Volume name>/<username>`.
 * NOTE There is a current limitation; now you have created a dedicated per-User encrypted volume(s), when you boot your machine the volume(s) with your home folder(s) will be locked/encrypted (so login will fail), and they will NOT automatically unlock (which can be a good thing, but a small problem as well). 
 * You will need to login to another secondary account (with the Home folder unchanged), just to unlock the per-user volume first. You can then log out, and log in as your intended target user, now its home is unlocked and mounted.
 TODO - Write optional launchctl script to prompt user for unlock password at user login, so no temporary account login is required to pre-unlock the per-user volume.
-21) Move user home mount point (*read all steps first*); Open 'System Settings', 'Users & Groups' (wait around 5 minutes while the now disabled iCloud stuff times out - Apple/iCloud really wants to know about your accounts), Ctrl+click on user, click 'Advanced options', change Home directory to `/Volumes/<Volume_name>/<username>`\
+20) Move user home mount point (*read all steps first*); Open 'System Settings', 'Users & Groups' (wait around 5 minutes while the now disabled iCloud stuff times out - Apple/iCloud really wants to know about your accounts), Ctrl+click on user, click 'Advanced options', change Home directory to `/Volumes/<Volume_name>/<username>`\
 OR, if you don't want to wait 5 minutes..\
 Move user mount point; `dscl . -change /Users/<username> NFSHomeDirectory /Users/<username> /Volumes/<Per-User Volume name>/<username>`
-22) reboot, login with temporary user/admin account (with unchanged home directory), mount the per-User volume for the target user, logout (not reboot), and login as your target user.
+21) reboot, login with temporary user/admin account (with unchanged home directory), mount the per-User volume for the target user, logout (not reboot), and login as your target user.
 
 Congratulations, this process is getting harder with each release of MacOS. But you now have a fully customised, de-junked MacOS, which is also secure at rest. This is the closest I have got Ventura to being Unix-like again..
 

@@ -14,11 +14,8 @@ defaults write -g NSBrowserColumnAnimationSpeedMultiplier -float 0
 defaults write com.apple.finder DisableAllAnimations -bool true
 defaults write com.apple.Mail DisableSendAnimations -bool true
 defaults write com.apple.Mail DisableReplyAnimations -bool true
-defaults write com.apple.Safari WebKitInitialTimedLayoutDelay 0.2
-
-# Disable menu bar transparency
-echo "# Disabling menu bar transparency"
-defaults write NSGlobalDomain AppleEnableMenuBarTransparency -bool false
+# NB; Safari preferences are containerised - requires Full Disk Access for your terminal app, otherwise silently does nothing
+defaults write com.apple.Safari WebKitInitialTimedLayoutDelay -float 0.2
 
 # Disable send and reply animations in Mail.app
 echo "# Disabling send and reply animations in Mail"

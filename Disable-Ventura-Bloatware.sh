@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 ## Procedure;
 #0) Take note of Agents and Daemons currently running; `launchctl list | grep -v "\-\t0"`
@@ -30,12 +30,19 @@
 #Disabling Daemon `com.apple.airportd` breaks Wi-Fi connectivity
 
 MYROOTDISK="/Volumes/Macintosh HD"
+# UID of the login user whose launchctl domains are targeted (check yours with `id -u`)
+TARGET_UID=501
 
+# The script runs in two phases;
+#  Normal mode:   requests launchctl disable of each service (honoured for some services only)
+#  Recovery mode: renames the plists on the mounted system volume (the part macOS always honours)
+# launchctl commands are skipped in Recovery mode - there they act on the Recovery
+# environment, not the installed OS - and renames are impossible in Normal mode (sealed volume).
 read -p "Please confirm; Running in Recovery mode? [y/n]" recmode
 if [[ "$recmode" != "y" ]]; then
-    echo "This script must be run from within Recovery mode!"
+    echo "Normal mode: only launchctl disable requests will be made."
+    echo "The plist renames must be done from Recovery mode afterward (see README)."
     echo
-    exit
 fi
 
 # TODO Build launchctl man page extracts for Ventura https://gist.github.com/dmattera/883a4457b67534df795cdd0fa1651a26
@@ -226,18 +233,31 @@ TODISABLE+=( "${LA_OTHER[@]}" )
 
 for agent in "${TODISABLE[@]}"
 do
-    echo "LaunchAgent: Requesting launchctl Disable of ${agent}" | tee -a ./Disable-Ventura-Bloatware.log
-    {
-        launchctl bootout user/0/${agent}    # Root shell user
-        launchctl bootout gui/501/${agent}   # UI Login User
-        launchctl bootout user/501/${agent}  # Shell Login User
-        launchctl disable user/0/${agent}    # Root shell user
-        launchctl disable gui/501/${agent}   # UI Login User
-        launchctl disable user/501/${agent}  # Shell Login User
-        launchctl remove user/0/${agent}     # Root shell user
-        launchctl remove gui/501/${agent}    # UI Login User
-        launchctl remove user/501/${agent}   # Shell Login User
-    } &> /dev/null
+    if [[ "$recmode" != "y" ]]; then
+        echo "LaunchAgent: Requesting launchctl Disable of ${agent}" | tee -a ./Disable-Ventura-Bloatware.log
+        {
+            launchctl bootout user/0/${agent}            # Root shell user
+            launchctl bootout gui/${TARGET_UID}/${agent}   # UI Login User
+            launchctl bootout user/${TARGET_UID}/${agent}  # Shell Login User
+            launchctl disable user/0/${agent}            # Root shell user
+            launchctl disable gui/${TARGET_UID}/${agent}   # UI Login User
+            launchctl disable user/${TARGET_UID}/${agent}  # Shell Login User
+            launchctl remove user/0/${agent}             # Root shell user
+            launchctl remove gui/${TARGET_UID}/${agent}    # UI Login User
+            launchctl remove user/${TARGET_UID}/${agent}   # Shell Login User
+        } &> /dev/null
+
+        # Location tracking runs under the special builtin _locationd user (UID 205)
+        if [ "${agent}" = 'com.apple.geod' ]; then
+            echo "Geod LaunchAgent: Requesting launchctl Disable of com.apple.geod for _locationd user" | tee -a ./Disable-Ventura-Bloatware.log
+            {
+                launchctl disable user/205/com.apple.geod
+                launchctl bootout user/205/com.apple.geod
+                launchctl disable user/${TARGET_UID}/com.apple.geodMachServiceBridge
+            } &> /dev/null
+        fi
+        continue
+    fi
 
     if [ -e "${MYROOTDISK}/System/Library/LaunchAgents/${agent}.plist" ] || [ -L "${MYROOTDISK}/System/Library/LaunchAgents/${agent}.plist" ]; then
         echo "LaunchAgent: Renaming ${agent}.plist to ${agent}.plist.bak" | tee -a ./Disable-Ventura-Bloatware.log
@@ -250,11 +270,7 @@ do
 
     # Disabling location tracking requires additional effort
     if [ "${agent}" = 'com.apple.geod' ] && [ -e "${MYROOTDISK}/System/Library/PrivateFrameworks/GeoServices.framework/Versions/A/XPCServices/com.apple.geod.xpc/Contents/MacOS/com.apple.geod" ]; then
-        echo "Geod LaunchAgent: Disabling com.apple.geod for _locationd user" | tee -a ./Disable-Ventura-Bloatware.log
-        # User ID 205 is special builtin _locationd user
-        launchctl disable user/205/com.apple.geod
-        launchctl bootout user/205/com.apple.geod
-        launchctl disable user/501/com.apple.geodMachServiceBridge
+        echo "Geod LaunchAgent: Renaming com.apple.geod XPC binary to com.apple.geod.bak" | tee -a ./Disable-Ventura-Bloatware.log
         mv "${MYROOTDISK}/System/Library/PrivateFrameworks/GeoServices.framework/Versions/A/XPCServices/com.apple.geod.xpc/Contents/MacOS/com.apple.geod" "${MYROOTDISK}/System/Library/PrivateFrameworks/GeoServices.framework/Versions/A/XPCServices/com.apple.geod.xpc/Contents/MacOS/com.apple.geod.bak"
     elif [ "${agent}" = 'com.apple.geod' ] && [ -e "${MYROOTDISK}/System/Library/PrivateFrameworks/GeoServices.framework/Versions/A/XPCServices/com.apple.geod.xpc/Contents/MacOS/com.apple.geod.bak" ]; then
         echo "Geod LaunchAgent: Already Disabled com.apple.geod for _locationd user" | tee -a ./Disable-Ventura-Bloatware.log
@@ -329,9 +345,14 @@ TODISABLE+=( "${LD_OTHER[@]}" )
 
 for daemon in "${TODISABLE[@]}"
 do
-    echo "LaunchDaemon: Requesting Disable of ${daemon}" | tee -a ./Disable-Ventura-Bloatware.log
-    launchctl disable system/${daemon}
-    launchctl remove system/${daemon}
+    if [[ "$recmode" != "y" ]]; then
+        echo "LaunchDaemon: Requesting launchctl Disable of ${daemon}" | tee -a ./Disable-Ventura-Bloatware.log
+        {
+            launchctl disable system/${daemon}
+            launchctl remove system/${daemon}
+        } &> /dev/null
+        continue
+    fi
 
     if [ -e "${MYROOTDISK}/System/Library/LaunchDaemons/${daemon}.plist" ]; then
         echo "LaunchDaemon: Renaming ${daemon}.plist to ${daemon}.plist.bak" | tee -a ./Disable-Ventura-Bloatware.log
@@ -345,6 +366,12 @@ do
 done
 
 echo "Done Disabling LaunchDaemons" | tee -a ./Disable-Ventura-Bloatware.log
+
+if [[ "$recmode" == "y" ]]; then
+    echo "Now create and bless a new snapshot (README steps 10-14), then reboot in Normal mode." | tee -a ./Disable-Ventura-Bloatware.log
+else
+    echo "launchctl requests complete. Reboot into Recovery mode and re-run this script to rename the plists (see README)." | tee -a ./Disable-Ventura-Bloatware.log
+fi
 
 exit 0
 

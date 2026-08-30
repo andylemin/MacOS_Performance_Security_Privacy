@@ -1,19 +1,15 @@
-#!/usr/bin/env ksh
+#!/bin/bash
 
 echo "From MacOS Catalina 10.15.3, /etc/sysctl.conf values are no longer respected. You need to set sysctls via plists instead (this script does this)"
 echo
 echo "Updating sysctl values on Ventura is generally not required anymore as Apple have already provided sane defaults to achieve 10Gbps performance"
 echo "Make sure you have read the changes in 'Library_LaunchDaemons_com.startup.sysctl.plist'"
 echo "In particular make sure you understand 'net.inet.tcp.tso' & 'kern.ipc.nmbclusters' and configure for your use case (info in README.md). These have the most impact."
+echo
+echo "NB; Installing plists into /Library/LaunchDaemons does NOT require disabling SIP."
+echo "Some individual sysctl keys may still refuse to change on some configurations - check /tmp/sysctl.err after reboot, and only then investigate SIP."
 read -r -p "Are you sure you want to increase sysctl values? [y/n]" iamsure
 if [[ "$iamsure" != "y" ]]; then
-    exit
-fi
-echo
-read -r -p "Have you disabled SIP? [y/n]" recmode
-if [[ "$recmode" != "y" ]]; then
-    echo "Disable SIP first (reboot, cmd# + R, 'csrutil disable')"
-    echo "Re-enable SIP when done (reboot, cmd# + R, 'csrutil enable') - Only if not using Disable-VenturaBloatware.sh"
     exit
 fi
 
@@ -32,8 +28,13 @@ fi
 # kern.ipc.somaxconn (old macs default 128, Ventura default 128, serverperfmode default 1024)
 # kern.ipc.nmbclusters (old macs default 32768, Ventura default 262144, serverperfmode default 65536)
 
-echo "Ventura - Updating /Library/LaunchDaemons/com.startup.sysctl.plist"
-sudo cp -f ./Library_LaunchDaemons_com.startup.sysctl.plist /Library/LaunchDaemons/com.startup.sysctl.plist
+# Two profile variants ship with this repo (same Label, deploy one only);
+#   Library_LaunchDaemons_com.startup.sysctl.plist          - current default (delayed_ack=3 auto, win_scale=8, 32MB autobufs, nmbclusters=262144)
+#   Library_LaunchDaemons_com.startup.sysctl_ventura.plist  - earlier variant (delayed_ack=1, win_scale=6, 8MB autobufs, nmbclusters=524288)
+SYSCTL_PLIST="./Library_LaunchDaemons_com.startup.sysctl.plist"
+
+echo "Updating /Library/LaunchDaemons/com.startup.sysctl.plist (from ${SYSCTL_PLIST})"
+sudo cp -f "${SYSCTL_PLIST}" /Library/LaunchDaemons/com.startup.sysctl.plist
 sudo chown root:wheel /Library/LaunchDaemons/com.startup.sysctl.plist
 # validate key-value pairs
 plutil /Library/LaunchDaemons/com.startup.sysctl.plist
@@ -43,7 +44,7 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/com.startup.sysctl.plist
 tail /tmp/sysctl.out
 tail /tmp/sysctl.err
 
-echo "Ventura - Updating /Library/LaunchDaemons/limit.maxfiles.plist"
+echo "Updating /Library/LaunchDaemons/limit.maxfiles.plist"
 sudo cp -f ./Library_LaunchDaemons_limit.maxfiles.plist /Library/LaunchDaemons/limit.maxfiles.plist
 sudo chown root:wheel /Library/LaunchDaemons/limit.maxfiles.plist
 plutil /Library/LaunchDaemons/limit.maxfiles.plist
@@ -51,6 +52,5 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/limit.maxfiles.plist
 echo
 
 echo "Current System Limits"
-limit
-
-echo "NOTICE; You can Re-enable SIP now if used! (reboot, cmd# + R, csrutil enable)"
+ulimit -a
+launchctl limit maxfiles

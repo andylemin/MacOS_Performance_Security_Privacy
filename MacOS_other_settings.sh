@@ -6,9 +6,8 @@ echo "# Setting common system settings"
 # Enable full keyboard access for all controls (e.g. enable Tab in modal dialogs)
 defaults write NSGlobalDomain AppleKeyboardUIMode -int 3
 
-# Show remaining battery percentage
-defaults write com.apple.menuextra.battery ShowPercent -string "YES"
-defaults write com.apple.menuextra.battery ShowTime -string "NO"
+# Show remaining battery percentage (battery moved into Control Center in Big Sur; -currentHost is required)
+defaults -currentHost write com.apple.controlcenter BatteryShowPercentage -bool true
 
 # Finder
 echo
@@ -26,8 +25,6 @@ defaults write com.apple.frameworks.diskimages auto-open-rw-root -bool true
 defaults write com.apple.finder _FXShowPosixPathInTitle -bool true
 # Avoid creating .DS_Store files on network volumes
 defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool true
-# Empty Trash securely by default
-defaults write com.apple.finder EmptyTrashSecurely -bool true
 # Disable disk image verification
 #defaults write com.apple.frameworks.diskimages skip-verify -bool true
 #defaults write com.apple.frameworks.diskimages skip-verify-locked -bool true
@@ -40,6 +37,8 @@ defaults write com.apple.finder EmptyTrashSecurely -bool true
 # Safari
 echo
 echo "# Setting common Safari settings"
+echo "NB; Safari preferences are containerised - these writes require Full Disk Access for your terminal app"
+echo "(System Settings -> Privacy & Security -> Full Disk Access), otherwise they silently do nothing"
 # Disable Safari’s thumbnail cache for History and Top Sites
 defaults write com.apple.Safari DebugSnapshotsUpdatePolicy -int 2
 # Enable Safari’s debug menu
@@ -47,17 +46,10 @@ defaults write com.apple.Safari IncludeDebugMenu -bool true
 # Remove useless icons from Safari’s bookmarks bar
 defaults write com.apple.Safari ProxiesInBookmarksBar "()"
 
-# Disable the Ping sidebar in iTunes
-echo
-echo "# Setting common legacy iTunes settings"
-defaults write com.apple.iTunes disablePingSidebar -bool true
-# Disable all the other Ping stuff in iTunes
-defaults write com.apple.iTunes disablePing -bool true
-
 # Disable recent items in Quicktime
 echo
 echo "# Setting common Quicktime settings"
-defaults write com.apple.QuickTimePlayerX NSRecentDocumentsLimit 0
+defaults write com.apple.QuickTimePlayerX NSRecentDocumentsLimit -int 0
 defaults delete com.apple.QuickTimePlayerX.LSSharedFileList RecentDocuments
 defaults write com.apple.QuickTimePlayerX.LSSharedFileList RecentDocuments -dict-add MaxAmount 0
 
@@ -161,7 +153,11 @@ sudo mdutil -a -i off
 
 echo
 echo "# Disabling Brew Analytics"
-brew analytics off
+if command -v brew >/dev/null 2>&1; then
+    brew analytics off
+else
+    echo "brew not installed - skipping"
+fi
 
 echo
 echo "# Starting Cleanup Actions"
@@ -174,9 +170,14 @@ sudo rm -rf ~/Library/Logs/*
 
 echo
 echo "# QuickView Reset/Clear Cache"
-brew install qlvideo
-sudo qlmanage -r cache
-sudo qlmanage -r
+if command -v brew >/dev/null 2>&1; then
+    brew install qlvideo
+else
+    echo "brew not installed - skipping qlvideo install"
+fi
+# qlmanage operates per-user; running under sudo would only reset root's cache
+qlmanage -r cache
+qlmanage -r
 echo "QuickView Configuring parameters"
 defaults write uk.org.marginal.qlvideo SnapshotAlways -bool YES
 defaults write uk.org.marginal.qlvideo SnapshotCount -int 1
@@ -200,11 +201,18 @@ echo "# Enabling MacOS sleep - light sleep and powernap modes can break many wor
 
 echo
 echo "# SSD TRIM"
-echo "Apple macOS enables Trim for internal official 'Apple' SSDs only by default."
-echo "Advanced users can enable Trim for all SSDs (with Apple APFS formatted partitions) including USB devices."
+echo "Apple internal SSDs and external NVMe (Thunderbolt/USB4) already Trim by default - trimforce mainly helps external SATA SSDs."
 echo "Apple macOS runs Trim when the file system is attached, on device connection or system restart."
 echo "Apple does not provide a manual Trim tool like with Windows or Linux."
-/usr/bin/sudo trimforce --enable
+echo "NB; trimforce prompts for confirmation and REBOOTS the machine when enabled."
+if [ "$(uname -m)" = "arm64" ]; then
+    echo "Apple Silicon detected - internal SSD already Trims; skipping trimforce (run 'sudo trimforce enable' manually if you use external SATA SSDs)"
+else
+    read -r -p "Enable trimforce (reboots on completion)? [y/n]" trimsure
+    if [ "$trimsure" = "y" ]; then
+        /usr/bin/sudo trimforce enable
+    fi
+fi
 
 echo
 echo "# JAVA - Uninstall manually if not required (or disable - Java can be disabled in System Preferences)"
