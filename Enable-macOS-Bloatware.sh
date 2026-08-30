@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Restores Apple LaunchAgents/LaunchDaemons previously disabled by Disable-Ventura-Bloatware.sh.
+# Restores Apple LaunchAgents/LaunchDaemons previously disabled by the Disable-*-Bloatware.sh scripts.
 # Must be run in Recovery mode with the system volume mounted read-write (README steps 1-7).
 # The restores only take effect after creating and blessing a new snapshot (README steps 10-14).
 

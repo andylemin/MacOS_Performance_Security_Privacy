@@ -1,0 +1,451 @@
+#!/bin/bash
+
+## Procedure;
+#0) Take note of Agents and Daemons currently running; `launchctl list | grep -v "\-\t0"`
+#1) Reboot in Recovery mode (Eg; https://www.lifewire.com/restart-a-mac-into-recovery-mode-5184142)
+#2) Open 'Terminal' application in Recovery mode
+#3) Disable Authenticated-Root SIP; `csrutil authenticated-root disable`
+#   Apple Silicon; first set 'Reduced Security' in Startup Security Utility (Recovery), then run the csrutil command.
+#   The machine lands in 'Permissive Security' afterward (side effect; Apple Pay is disabled while Permissive).
+#   If you also use partial SIP (`csrutil enable --without ...`), run that BEFORE `authenticated-root disable` - plain `csrutil enable` re-enables authenticated-root.
+#   Requires macOS 15.1+ if on Sequoia; 15.0 cannot change security policy on Apple Silicon (fixed in 15.1).
+#4) List all disk volumes and identifiers; `diskutil list`
+#5) Identify your SYSTEM VOLUME identifier - (Eg, 'disk3s3' for Volume 'Macintosh HD') in the diskutil output under the '(synthesized)' set.
+#   Use the volume identifier, NEVER a snapshot identifier (Eg 'disk3s3s1') - writes to a mounted snapshot appear to succeed then vanish.
+#6) Mount volume; `diskutil mount disk3s3` (replace 'disk3s3' with your own disk identifier if different)
+#7) Make writable; `mount -uw /Volumes/Macintosh\ HD` (replace 'Macintosh\ HD' with your disk volume name)
+#   If writes still fail or vanish (seen on Sonoma/Sequoia); `umount /Volumes/Macintosh\ HD` then `mkdir /tmp/sysvol && mount -o nobrowse -t apfs /dev/disk3s3 /tmp/sysvol` and set MYROOTDISK=/tmp/sysvol
+#8) Update `${MYROOTDISK}` variable in the `Disable-Sequoia-Bloatware.sh` script, and in the commands below (steps 11, 12), if different from (`/Volumes/Macintosh\ HD`)
+#9) Make script executable; `chmod 775 ./Disable-Sequoia-Bloatware.sh` and execute `./Disable-Sequoia-Bloatware.sh` (in Recovery Mode Terminal)
+#10) Check existing snapshots; `diskutil apfs listSnapshots disk3s3` (change disk and partition to yours)
+#11) Apple Silicon - Create and tag new bootable snapshot; `bless --mount /Volumes/Macintosh\ HD --create-snapshot` (NO --bootefi)
+#12) Intel - Create and tag new bootable snapshot; `bless --folder /Volumes/Macintosh\ HD/System/Library/CoreServices --bootefi --create-snapshot`
+#   If bless errors with "Can't use last-sealed-snapshot or create-snapshot on non system volume" you mounted the wrong identifier (or hit the known APFS volume-layout bug) - STOP and re-check step 5.
+#   Rollback to Apple's sealed snapshot (either arch); `bless --mount /Volumes/Macintosh\ HD --bootefi --last-sealed-snapshot`
+#13) Check snapshots; `diskutil apfs listSnapshots disk3s3` (change disk and partition to yours) - Should show your new customised SSV Volume is the new MacOS Boot image
+#14) Reboot in Normal mode (first reboot with new snapshot might take upto 10 minutes)
+#15) Verify LaunchAgents and Daemons are now stopped; `launchctl list | grep -v "\-\t0"`
+# NB; EVERY macOS update (including point releases) rebuilds and re-seals the SSV, discarding these changes - re-run this procedure after each update.
+
+# * See README.md for all remaining steps *
+
+# Agents not to disable
+#Disabling `com.apple.speech.speechdatainstallerd` `com.apple.speech.speechsynthesisd` `com.apple.speech.synthesisserver` will freeze Edit menus.\
+#Disabling `com.apple.bird` will prevent saving prompts from being shown.\
+#`com.apple.imklaunchagent` is not related to iMessage.\
+#Disabling `com.apple.WebKit.PluginAgent` can cause video problems in Safari.\
+#`com.apple.nsurlsessiond` invokes and handles network download requests for many applications and services on macOS (inc iOS and tvOS and watchOS) - Use LittleSnitch to control who it talks to instead.
+#Disabling Daemon `com.apple.airportd` breaks Wi-Fi connectivity
+# Sequoia additions (field reports from the community);
+#Disabling `com.apple.contactsd` freezes the App Store.
+#Disabling `com.apple.donotdisturbd` breaks Notification Center.
+#Disabling `com.apple.chronod` blanks all widgets.
+#Disabling Daemon `com.apple.dhcp6d` breaks networking after VPN disconnect until reboot.
+#Disabling Daemon `com.apple.biometrickitd` breaks Touch ID.
+#Disabling Daemon `com.apple.AirPlayXPCHelper` breaks media playback (Eg YouTube) in Safari/WebKit.
+#Disabling Daemons `com.apple.bridgeOSUpdateProxy` `com.apple.bosreporter` `com.apple.boswatcher` silently breaks macOS updates on Apple Silicon.
+#Disabling the Agent-domain `com.apple.rapportd`/`com.apple.rapportd-user` breaks Screen Mirroring (the system Daemon `com.apple.rapportd` can still be disabled).
+
+MYROOTDISK="/Volumes/Macintosh HD"
+# UID of the login user whose launchctl domains are targeted (check yours with `id -u`)
+TARGET_UID=501
+
+# Written for Sequoia (15.1+); every operation is existence-guarded so it also runs on 13/14
+# (missing services log as 'not found'). Sequoia 15.0 cannot change SIP/security policy on
+# Apple Silicon ("Failed to create paired recovery local policy") - fixed in 15.1.
+OSVER="$(sw_vers -productVersion)"
+case "${OSVER}" in
+    15.0|15.0.*)
+        echo "macOS 15.0 detected - update to 15.1 or later before running this procedure!"
+        exit 1
+        ;;
+    13.*|14.*|15.*) ;;
+    *)
+        read -p "macOS ${OSVER} is untested with this script (built for 13-15). Continue anyway? [y/n]" osok
+        if [[ "$osok" != "y" ]]; then
+            exit 1
+        fi
+        ;;
+esac
+
+# The script runs in two phases;
+#  Normal mode:   requests launchctl disable of each service (honoured for some services only)
+#  Recovery mode: renames the plists on the mounted system volume (the part macOS always honours)
+# launchctl commands are skipped in Recovery mode - there they act on the Recovery
+# environment, not the installed OS - and renames are impossible in Normal mode (sealed volume).
+read -p "Please confirm; Running in Recovery mode? [y/n]" recmode
+if [[ "$recmode" != "y" ]]; then
+    echo "Normal mode: only launchctl disable requests will be made."
+    echo "The plist renames must be done from Recovery mode afterward (see README)."
+    echo
+fi
+
+# TODO Build launchctl man page extracts for Ventura https://gist.github.com/dmattera/883a4457b67534df795cdd0fa1651a26
+
+# Launch Agents
+# TODO Testing - When Bluetooth is excluded (from being disabled by commenting 'TODISABLE+=( "${LA_BLUETOOTH[@]}" )'), you also need to stop com.apple.sharingd from being disabled.
+#  Console logs show bluetoothd trying to connect to com.apple.SharingServices which is likely part of com.apple.sharingd
+LA_BLUETOOTH=('com.apple.bluetoothuserd')
+
+LA_QUICKLOOK=('com.apple.quicklook' \
+'com.apple.quicklook.ui.helper' \
+'com.apple.quicklook.ThumbnailsAgent')
+
+LA_TIMEMACHINE=('com.apple.TMHelperAgent')
+
+# TODO Disable EscrowSecurityAlert
+
+LA_CLOUD=('com.apple.icloud.fmfd' \
+#  ^ Renamed in Sequoia to findmydeviced.findmydevice-user-agent (below) - fmfd kept for 13/14
+'com.apple.iCloudNotificationAgent' \
+'com.apple.iCloudUserNotifications' \
+'com.apple.icloud.searchpartyuseragent' \
+'com.apple.icloud.findmydeviced.findmydevice-user-agent' \
+'com.apple.findmy.findmylocateagent' \
+'com.apple.icloudmailagent' \
+'com.apple.cloudd' \
+'com.apple.cloudpaird' \
+'com.apple.cloudphotod' \
+#'com.apple.CloudPhotosConfiguration' \  # No longer in Ventura
+'com.apple.CloudSettingsSyncAgent' \
+'com.apple.dataaccess.dataaccessd' \
+'com.apple.itunescloudd' \
+#'com.apple.ManagedClient.cloudconfigurationd' \  # No longer in Ventura
+'com.apple.syncdefaultsd' \
+'com.apple.followupd' \
+'com.apple.amsengagementd' \
+'com.apple.sociallayerd' \
+'com.apple.protectedcloudstorage.protectedcloudkeysyncing' \
+#'com.apple.BTServer.cloudpairing' \  # No longer in Ventura
+'com.apple.security.cloudkeychainproxy3')
+
+LA_MDM=('com.apple.ManagedClientAgent.enrollagent' \
+'com.apple.ManagedClientAgent.agent')
+
+LA_ADVERTISING=('com.apple.ap.adprivacyd' \
+#'com.apple.ap.adservicesd' \  # No longer in Ventura
+'com.apple.ap.promotedcontentd')
+
+LA_CONTACTSANDCALENDAR=('com.apple.contactsd' \
+'com.apple.AddressBook.AssistantService' \
+'com.apple.AddressBook.SourceSync' \
+'com.apple.AddressBook.abd' \
+#'com.apple.ContactsAgent' \  # No longer in Ventura
+#'com.apple.CalendarAgent' \  # No longer in Ventura
+'com.apple.calaccessd' \
+#'com.apple.AddressBook.ContactsAccountsService' \  # No longer in Ventura
+'com.apple.CallHistoryPluginHelper')
+
+LA_FAMILYSYNC=('com.apple.familycircled' \
+'com.apple.familycontrols.useragent' \
+'com.apple.familynotificationd' \
+'com.apple.UsageTrackingAgent')
+
+LA_BLOAT=('com.apple.financed' \
+#'com.apple.analyticsd' \  # No longer in Ventura
+'com.apple.gamed' \
+'com.apple.newsd' \
+'com.apple.weatherd' \
+'com.apple.macos.studentd' \
+'com.apple.progressd' \
+'com.apple.remindd' \
+'com.apple.helpd' \
+'com.apple.tipsd')
+
+LA_DICTATION=('com.apple.assistant_service' \
+'com.apple.assistantd')
+
+LA_FACETIME_MESSAGES=('com.apple.imagent' \
+'com.apple.imautomatichistorydeletionagent' \
+'com.apple.imtransferagent' \
+'com.apple.telephonyutilities.callservicesd' \
+'com.apple.avconferenced' \
+'com.apple.CommCenter-osx' \
+#'com.apple.rapportd-user' \  # Breaks Screen Mirroring on Sequoia - re-add if you never mirror
+'com.apple.transparencyStaticKey')
+
+LA_PHOTOS=('com.apple.mediaanalysisd' \
+'com.apple.peopled' \
+'com.apple.photoanalysisd' \
+'com.apple.photolibraryd' \
+'com.apple.mediastream.mstreamd')
+
+LA_SAFARI=('com.apple.Safari.PasswordBreachAgent' \
+'com.apple.Safari.SafeBrowsing.Service' \
+#'com.apple.SafariCloudHistoryPushAgent' \  # No longer in Ventura
+'com.apple.SafariBookmarksSyncAgent')
+
+# axassetsd + corespeechd are what finally stop SiriAUSP / SiriTTSService.TrialProxy running
+# siriinferenced moved from LaunchDaemons to LaunchAgents in Sequoia (listed in both, existence-guarded)
+LA_SIRI=('com.apple.siriactionsd' \
+'com.apple.Siri.agent' \
+#'com.apple.siri.context.service' \  # No longer in Ventura
+'com.apple.proactiveeventtrackerd' \
+'com.apple.triald' \
+'com.apple.suggestd' \
+'com.apple.siriknowledged' \
+'com.apple.sirittsd' \
+'com.apple.assistant_cdmd' \
+'com.apple.corespeechd' \
+'com.apple.SiriTTSTrainingAgent' \
+'com.apple.voicebankingd' \
+'com.apple.siriinferenced' \
+'com.apple.accessibility.axassetsd')
+
+# Apple Intelligence (Sequoia 15+)
+# NB; Renaming these plists stops the daemons but NOT the ~7.2GB of AI model cryptexes which
+# mobileassetd grafts onto the Data volume - ALSO turn off Apple Intelligence in System Settings first.
+LA_APPLEINTELLIGENCE=('com.apple.generativeexperiencesd' \
+'com.apple.intelligenceflowd' \
+'com.apple.intelligencecontextd' \
+'com.apple.naturallanguaged')
+
+# Usage analytics and proactive context collection (Sequoia 15+)
+LA_ANALYTICS=('com.apple.inputanalyticsd' \
+'com.apple.geoanalyticsd' \
+'com.apple.ContextStoreAgent' \
+'com.apple.duetexpertd')
+
+LA_HOME=('com.apple.homed')
+
+# com.apple.geod Launch Agent no longer in Ventura (entry used to call extra removal logic)
+LA_LOCATION=('com.apple.geodMachServiceBridge' \
+'com.apple.geod' \
+'com.apple.CoreLocationAgent' \
+'com.apple.parsec-fbf' \
+'com.apple.parsecd' \
+'com.apple.routined')
+
+LA_MAPS=('com.apple.Maps.pushdaemon' \
+#'com.apple.Maps.mapspushd' \  # No longer in Ventura
+'com.apple.Maps.mapssyncd' \
+'com.apple.maps.destinationd' \
+'com.apple.navd')
+
+# Client access to other shares still work. Stops your mac sharing to others
+LA_SHARING=('com.apple.screensharing.agent' \
+'com.apple.screensharing.menuextra' \
+'com.apple.screensharing.MessagesAgent' \
+'com.apple.SSInvitationAgent' \
+'com.apple.amp.mediasharingd' \
+'com.apple.sharingd' \
+'com.apple.sidecar-hid-relay' \
+'com.apple.sidecar-relay')
+
+LA_IDENTITYDATA=('com.apple.BiomeAgent' \
+'com.apple.biomesyncd' \
+'com.apple.intelligenceplatformd' \
+'com.apple.knowledge-agent' \
+'com.apple.knowledgeconstructiond' \
+'com.apple.spotlightknowledged' \
+'com.apple.ScreenTimeAgent' \
+'com.apple.accessibility.MotionTrackingAgent' \
+'com.apple.transparencyd')
+
+LA_MUSIC=('com.apple.AMPArtworkAgent' \
+'com.apple.AMPDeviceDiscoveryAgent' \
+'com.apple.AMPLibraryAgent' \
+'com.apple.ensemble')
+
+LA_APPLETV=('com.apple.videosubscriptionsd' \
+'com.apple.watchlistd')
+
+LA_PAYMENTS=('com.apple.passd')
+
+LA_AUTOMATIONS=('com.apple.FolderActionsDispatcher' \
+'com.apple.ScriptMenuApp')
+
+# Make sure you have an alternative. Eg, LaunchBar or Alfred etc
+LA_SPOTLIGHT=('com.apple.Spotlight' \
+'com.apple.corespotlightd')
+
+LA_AIRPLAY=('com.apple.AirPlayUIAgent')
+
+# Disabling WiFiVelocityAgent does not break wifi, just stop logging your wifi network history
+LA_OTHER=('com.apple.networkserviceproxy-osx' \
+'com.apple.universalaccessd' \
+#'com.apple.CSCSupported' \  # No longer in Ventura
+'com.apple.WiFiVelocityAgent' \
+#  ^ No longer in Sequoia (kept for 13/14)
+'com.apple.replicatord' \
+'com.apple.cmio.ContinuityCaptureAgent')
+
+TODISABLE=()
+TODISABLE+=( "${LA_BLUETOOTH[@]}" )    # Do not disable if you use Bluetooth headphones/keyboards/controllers etc
+# TODISABLE+=( "${LA_QUICKLOOK[@]}" )    # Do not disable if you use QuickLook (image/video previews)
+# TODISABLE+=( "${LA_TIMEMACHINE[@]}" )  # Do not disable if you use Time Machine backups
+TODISABLE+=( "${LA_CLOUD[@]}" )
+TODISABLE+=( "${LA_MDM[@]}" )
+TODISABLE+=( "${LA_ADVERTISING[@]}" )
+TODISABLE+=( "${LA_CONTACTSANDCALENDAR[@]}" )
+TODISABLE+=( "${LA_FAMILYSYNC[@]}" )
+TODISABLE+=( "${LA_BLOAT[@]}" )
+TODISABLE+=( "${LA_DICTATION[@]}" )
+TODISABLE+=( "${LA_FACETIME_MESSAGES[@]}" )
+TODISABLE+=( "${LA_PHOTOS[@]}" )       # Photos App will still work
+TODISABLE+=( "${LA_SAFARI[@]}" )       # Safari will still work
+TODISABLE+=( "${LA_SIRI[@]}" )
+TODISABLE+=( "${LA_APPLEINTELLIGENCE[@]}" )  # Sequoia 15+; also turn off Apple Intelligence in System Settings
+TODISABLE+=( "${LA_ANALYTICS[@]}" )
+TODISABLE+=( "${LA_HOME[@]}" )
+TODISABLE+=( "${LA_LOCATION[@]}" )
+TODISABLE+=( "${LA_MAPS[@]}" )         # Maps will still work
+TODISABLE+=( "${LA_SHARING[@]}" )      # Do not disable if you use Screen and file sharing
+TODISABLE+=( "${LA_IDENTITYDATA[@]}" )
+TODISABLE+=( "${LA_MUSIC[@]}" )
+TODISABLE+=( "${LA_APPLETV[@]}" )
+TODISABLE+=( "${LA_PAYMENTS[@]}" )
+# TODISABLE+=( "${LA_AUTOMATIONS[@]}" )
+TODISABLE+=( "${LA_SPOTLIGHT[@]}" )    # Make sure you have an alternative like LaunchBar
+TODISABLE+=( "${LA_AIRPLAY[@]}" )      # Do not disable if you use AirPlay
+TODISABLE+=( "${LA_OTHER[@]}" )
+
+for agent in "${TODISABLE[@]}"
+do
+    if [[ "$recmode" != "y" ]]; then
+        echo "LaunchAgent: Requesting launchctl Disable of ${agent}" | tee -a ./Disable-Sequoia-Bloatware.log
+        {
+            launchctl bootout user/0/${agent}            # Root shell user
+            launchctl bootout gui/${TARGET_UID}/${agent}   # UI Login User
+            launchctl bootout user/${TARGET_UID}/${agent}  # Shell Login User
+            launchctl disable user/0/${agent}            # Root shell user
+            launchctl disable gui/${TARGET_UID}/${agent}   # UI Login User
+            launchctl disable user/${TARGET_UID}/${agent}  # Shell Login User
+            launchctl remove user/0/${agent}             # Root shell user
+            launchctl remove gui/${TARGET_UID}/${agent}    # UI Login User
+            launchctl remove user/${TARGET_UID}/${agent}   # Shell Login User
+        } &> /dev/null
+
+        # Location tracking runs under the special builtin _locationd user (UID 205)
+        if [ "${agent}" = 'com.apple.geod' ]; then
+            echo "Geod LaunchAgent: Requesting launchctl Disable of com.apple.geod for _locationd user" | tee -a ./Disable-Sequoia-Bloatware.log
+            {
+                launchctl disable user/205/com.apple.geod
+                launchctl bootout user/205/com.apple.geod
+                launchctl disable user/${TARGET_UID}/com.apple.geodMachServiceBridge
+            } &> /dev/null
+        fi
+        continue
+    fi
+
+    if [ -e "${MYROOTDISK}/System/Library/LaunchAgents/${agent}.plist" ] || [ -L "${MYROOTDISK}/System/Library/LaunchAgents/${agent}.plist" ]; then
+        echo "LaunchAgent: Renaming ${agent}.plist to ${agent}.plist.bak" | tee -a ./Disable-Sequoia-Bloatware.log
+        mv "${MYROOTDISK}/System/Library/LaunchAgents/${agent}.plist" "${MYROOTDISK}/System/Library/LaunchAgents/${agent}.plist.bak"
+    elif [ -e "${MYROOTDISK}/System/Library/LaunchAgents/${agent}.plist.bak" ] || [ -L "${MYROOTDISK}/System/Library/LaunchAgents/${agent}.plist.bak" ]; then
+        echo "LaunchAgent: Already Renamed ${agent}.plist to ${agent}.plist.bak" | tee -a ./Disable-Sequoia-Bloatware.log
+    else
+        echo "LaunchAgent: '${agent}.plist' not found in ${MYROOTDISK}/System/Library/LaunchAgents/" | tee -a ./Disable-Sequoia-Bloatware.log
+    fi
+
+    # Disabling location tracking requires additional effort
+    if [ "${agent}" = 'com.apple.geod' ] && [ -e "${MYROOTDISK}/System/Library/PrivateFrameworks/GeoServices.framework/Versions/A/XPCServices/com.apple.geod.xpc/Contents/MacOS/com.apple.geod" ]; then
+        echo "Geod LaunchAgent: Renaming com.apple.geod XPC binary to com.apple.geod.bak" | tee -a ./Disable-Sequoia-Bloatware.log
+        mv "${MYROOTDISK}/System/Library/PrivateFrameworks/GeoServices.framework/Versions/A/XPCServices/com.apple.geod.xpc/Contents/MacOS/com.apple.geod" "${MYROOTDISK}/System/Library/PrivateFrameworks/GeoServices.framework/Versions/A/XPCServices/com.apple.geod.xpc/Contents/MacOS/com.apple.geod.bak"
+    elif [ "${agent}" = 'com.apple.geod' ] && [ -e "${MYROOTDISK}/System/Library/PrivateFrameworks/GeoServices.framework/Versions/A/XPCServices/com.apple.geod.xpc/Contents/MacOS/com.apple.geod.bak" ]; then
+        echo "Geod LaunchAgent: Already Disabled com.apple.geod for _locationd user" | tee -a ./Disable-Sequoia-Bloatware.log
+    fi
+    echo "" | tee -a ./Disable-Sequoia-Bloatware.log
+
+    # ls -lh "/Volumes/Macintosh HD/System/Volumes/Data/Users/$(id -un)/Library/Containers/com.apple.geod/Data/Library/Application Scripts/com.apple.geod"
+    # sudo ls -lh "/Volumes/Macintosh HD/System/Volumes/Data/private/var/root/Library/Containers/com.apple.geod/Data/Library/Application Scripts/com.apple.geod"
+done
+
+echo "Done Disabling LaunchAgents" | tee -a ./Disable-Sequoia-Bloatware.log
+
+
+# Launch Daemons
+
+LD_TIMEMACHINE=('com.apple.backupd' \
+'com.apple.backupd-helper')
+
+LD_CLOUD=('com.apple.cloudd' \
+#'com.apple.cloudpaird' \  # No longer in Ventura
+#'com.apple.cloudphotod' \  # No longer in Ventura
+#'com.apple.CloudPhotosConfiguration' \  # No longer in Ventura
+'com.apple.icloud.findmydeviced' \
+#'com.apple.icloud.fmfd' \  # No longer in Ventura
+#'com.apple.itunescloudd' \  # No longer in Ventura
+'com.apple.icloud.searchpartyd')
+
+LD_SHARING=('com.apple.coreduetd' \
+'com.apple.screensharing')
+
+LD_MDM=('com.apple.ManagedClient.cloudconfigurationd' \
+'com.apple.ManagedClient.enroll' \
+'com.apple.ManagedClient.startup' \
+'com.apple.ManagedClient' \
+'com.apple.ManagedClient.mechanism' \
+'com.apple.remotemanagementd')
+
+LD_NFC=('com.apple.nfcd' \
+'com.apple.nearbyd')
+
+LD_OTHER=('com.apple.locationd' \
+'com.apple.findmymac' \
+'com.apple.findmy.findmybeaconingd' \
+'com.apple.analyticsd' \
+'com.apple.audioanalyticsd' \
+'com.apple.ecosystemanalyticsd' \
+'com.apple.biomed' \
+'com.apple.osanalytics.osanalyticshelper' \
+#'com.apple.CoreLocationAgent' \  # No longer in Ventura
+#'com.apple.AirPlayXPCHelper' \  # Breaks media playback (Eg YouTube) in Safari/WebKit on Sequoia
+#'com.apple.modelmanagerd' \  # Apple Intelligence ML models - disabling has caused coreaudiod/launchd CPU spin; re-add at your own risk
+'com.apple.RemoteDesktop.PrivilegeProxy' \
+'com.apple.familycontrols' \
+'com.apple.findmymacmessenger' \
+#'com.apple.followupd' \  # No longer in Ventura
+#'com.apple.FollowUpUI' \  # No longer in Ventura
+'com.apple.ftp-proxy' \
+#'com.apple.ftpd' \  # No longer in Ventura
+'com.apple.GameController.gamecontrollerd' \
+#'com.apple.geod' \  # No longer in Ventura
+#'com.apple.protectedcloudstorage.protectedcloudkeysyncing' \  # No longer in Ventura
+'com.apple.netbiosd' \
+'com.apple.rapportd' \
+#'com.apple.security.cloudkeychainproxy3' \  # No longer in Ventura
+#'com.apple.siri.morphunassetsupdaterd' \  # No longer in Ventura
+'com.apple.siriinferenced' \
+'com.apple.triald.system' \
+'com.apple.wifianalyticsd')
+
+TODISABLE=()
+#TODISABLE+=( "${LD_TIMEMACHINE[@]}" )  # Do not disable if you use Time Machine backups
+TODISABLE+=( "${LD_CLOUD[@]}" )
+TODISABLE+=( "${LD_SHARING[@]}" )
+TODISABLE+=( "${LD_MDM[@]}" )
+TODISABLE+=( "${LD_NFC[@]}" )
+TODISABLE+=( "${LD_OTHER[@]}" )
+
+for daemon in "${TODISABLE[@]}"
+do
+    if [[ "$recmode" != "y" ]]; then
+        echo "LaunchDaemon: Requesting launchctl Disable of ${daemon}" | tee -a ./Disable-Sequoia-Bloatware.log
+        {
+            launchctl disable system/${daemon}
+            launchctl remove system/${daemon}
+        } &> /dev/null
+        continue
+    fi
+
+    if [ -e "${MYROOTDISK}/System/Library/LaunchDaemons/${daemon}.plist" ]; then
+        echo "LaunchDaemon: Renaming ${daemon}.plist to ${daemon}.plist.bak" | tee -a ./Disable-Sequoia-Bloatware.log
+        mv "${MYROOTDISK}/System/Library/LaunchDaemons/${daemon}.plist" "${MYROOTDISK}/System/Library/LaunchDaemons/${daemon}.plist.bak"
+    elif [ -e "${MYROOTDISK}/System/Library/LaunchDaemons/${daemon}.plist.bak" ]; then
+        echo "LaunchDaemon: Already Renamed ${daemon}.plist to ${daemon}.plist.bak" | tee -a ./Disable-Sequoia-Bloatware.log
+    else
+        echo "LaunchDaemon: '${daemon}.plist' not found in ${MYROOTDISK}/System/Library/LaunchDaemons/" | tee -a ./Disable-Sequoia-Bloatware.log
+    fi
+    echo "" | tee -a ./Disable-Sequoia-Bloatware.log
+done
+
+echo "Done Disabling LaunchDaemons" | tee -a ./Disable-Sequoia-Bloatware.log
+
+if [[ "$recmode" == "y" ]]; then
+    echo "Now create and bless a new snapshot (README steps 10-14), then reboot in Normal mode." | tee -a ./Disable-Sequoia-Bloatware.log
+else
+    echo "launchctl requests complete. Reboot into Recovery mode and re-run this script to rename the plists (see README)." | tee -a ./Disable-Sequoia-Bloatware.log
+fi
+
+exit 0
+

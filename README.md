@@ -1,12 +1,22 @@
 
 #### Collection of scripts to speed up MacOS for software development, Network protocol performance testing, and scientific research systems
 
-### `Disable-Ventura-Bloatware.sh`
-Credit: Original process disable script (Disable bunch of #$!@) by pwnsdx https://gist.github.com/pwnsdx/d87b034c4c0210b988040ad2f85a68d3 and others
+### `Disable-Ventura-Bloatware.sh` / `Disable-Sequoia-Bloatware.sh`
+Credit: Original process disable script (Disable bunch of #$!@) by pwnsdx (gist now deleted) and others.\
+For maintained per-version service lists see also b0gdanw's gists (https://gist.github.com/b0gdanw).
 
-This process disables unwanted Apple services on macOS Ventura (13) to improve performance and stability - Make it more Unix-like again..\
+This process disables unwanted Apple services to improve performance and stability - Make it more Unix-like again..\
+Use `Disable-Ventura-Bloatware.sh` on macOS Ventura (13), and `Disable-Sequoia-Bloatware.sh` on Sonoma (14) / Sequoia (15.1+) - the Sequoia
+script adds the Apple Intelligence, analytics, and Find My era services, and every operation is existence-guarded so missing services just log as 'not found'.\
 Required experience level; Advanced users (only tested on Apple M2 so far).\
 It may work with older versions macOS (11, 12) - but not tested (older versions also use different agents/daemons).
+
+**Sequoia (15) notes;**
+- Requires 15.1 or later. 15.0 cannot change SIP/security policy on Apple Silicon ("Failed to create paired recovery local policy" / SDErrorDomain 104) - fixed in 15.1.
+- Apple Silicon; set 'Reduced Security' in Startup Security Utility BEFORE `csrutil authenticated-root disable`. The machine lands in 'Permissive Security' afterward, which disables Apple Pay. SIP state lives in the LocalPolicy (not NVRAM); use Startup Security Utility, never `bputil`, to change policy.
+- If you also use partial SIP (`csrutil enable --without ...`), run it BEFORE `authenticated-root disable` - plain `csrutil enable` re-enables authenticated-root.
+- EVERY macOS update (including 15.x.y point releases) rebuilds and re-seals the SSV, discarding all changes - re-run the procedure after each update. A failed update on a modified SSV is recovered with the full Installer app (Combo updates no longer exist).
+- Apple Intelligence; disabling the AI daemons does NOT stop the ~7.2GB of AI model cryptexes which `mobileassetd` grafts onto the Data volume - also turn Apple Intelligence off in System Settings first.
 
 Running this tool is at your own risk, and no support is provided. Make sure you have backups.. Never run scripts from the internet without reading the code, and understanding what they are doing.\
 Your experience may vary, my machine was much faster, CPU usage was lower, and battery lasted longer :D But at the cost of less/unwanted functionality (Mine is a research machine and I need consistent performance - Ie, no unsolicited junk processes randomly using resources and affecting test results)
@@ -110,17 +120,20 @@ Each of these name changes can be reverted (remove .bak extension) to restore an
 0) Take note of Agents and Daemons currently running; `launchctl list | grep -v "\-\t0" > ~/before-disable.txt`
 1) Reboot in Recovery mode (Eg; https://www.lifewire.com/restart-a-mac-into-recovery-mode-5184142)
 2) Open 'Terminal' application in Recovery mode
-3) Disable SIP; `csrutil authenticated-root disable`
+3) Disable Authenticated-Root SIP; `csrutil authenticated-root disable`\
+Apple Silicon; first set 'Reduced Security' in Startup Security Utility, then run the csrutil command (see Sequoia notes above).
 4) List all disk volumes and identifiers; `diskutil list`
-5) Identify your system disk identifier and partition/slice for the OS - (Eg, 'disk3s3' for Volume 'Macintosh HD') in the diskutil output under the '(synthesized)' set (The one without '- Data')
+5) Identify your system disk identifier and partition/slice for the OS - (Eg, 'disk3s3' for Volume 'Macintosh HD') in the diskutil output under the '(synthesized)' set (The one without '- Data').\
+Use the VOLUME identifier, never a snapshot identifier (Eg 'disk3s3s1') - writes to a mounted snapshot appear to succeed then vanish on reboot.
 6) Mount volume; `diskutil mount disk3s3` (replace 'disk3s3' with your own disk identifier if different)
-7) Make writable; `mount -uw /Volumes/Macintosh\ HD` (replace 'Macintosh\ HD' with your disk volume name)
-8) Update `${MYROOTDISK}` variable in the `Disable-Ventura-Bloatware.sh` script (~Line 32) if you are not using 'Macintosh HD'
-9) Make script executable; `chmod 775 ./Disable-Ventura-Bloatware.sh` and execute `./Disable-Ventura-Bloatware.sh` (in Recovery Mode Terminal)
+7) Make writable; `mount -uw /Volumes/Macintosh\ HD` (replace 'Macintosh\ HD' with your disk volume name)\
+If writes still fail or vanish (seen on Sonoma/Sequoia); `umount /Volumes/Macintosh\ HD` then `mkdir /tmp/sysvol && mount -o nobrowse -t apfs /dev/disk3s3 /tmp/sysvol` and use `/tmp/sysvol` as your `${MYROOTDISK}`
+8) Update `${MYROOTDISK}` variable in the disable script if you are not using 'Macintosh HD'
+9) Make the script executable and run it (in Recovery Mode Terminal); `chmod 775 ./Disable-Sequoia-Bloatware.sh && ./Disable-Sequoia-Bloatware.sh` (use `Disable-Ventura-Bloatware.sh` on macOS 13)
 10) Check existing snapshots; `diskutil apfs listSnapshots disk3s3` (change disk and partition to yours)
-11) Create new disk snapshot; `/Volumes/Macintosh\ HD/System/Library/Filesystems/apfs.fs/Contents/Resources/apfs_systemsnapshot -s "Custom1" -v /Volumes/Macintosh\ HD` (replace 'Macintosh\ HD' if different)
-12) Tag new snapshot bootable; `/Volumes/Macintosh\ HD/System/Library/Filesystems/apfs.fs/Contents/Resources/apfs_systemsnapshot -r "Custom1" -v /Volumes/Macintosh\ HD` (replace 'Macintosh\ HD' if different)\
-**OR 11 & 12** single command) `bless --mount /Volumes/Macintosh\ HD --bootefi --create-snapshot` (I have not confirmed if there is any difference between this command and 11+12 - They both seem to work the same so far)
+11) Apple Silicon - Create and tag new bootable snapshot; `bless --mount /Volumes/Macintosh\ HD --create-snapshot` (NO --bootefi)
+12) Intel - Create and tag new bootable snapshot; `bless --folder /Volumes/Macintosh\ HD/System/Library/CoreServices --bootefi --create-snapshot`\
+If bless errors with "Can't use last-sealed-snapshot or create-snapshot on non system volume" you mounted the wrong identifier (or hit a known APFS volume-layout bug) - STOP and re-check step 5.
 13) Check snapshots; `diskutil apfs listSnapshots disk3s3` (change disk and partition to yours) - Should show your new customised SSV Volume is the new MacOS Boot image
 14) Reboot in Normal mode (first reboot with new snapshot might take upto 10 minutes)
 15) Verify LaunchAgents and Daemons are now stopped; `launchctl list | grep -v "\-\t0" > ~/after-disable.txt`\
@@ -132,7 +145,8 @@ Each of these name changes can be reverted (remove .bak extension) to restore an
 Perform common activities to exercise all needed features, and watch for issues in Console. If things are not working as desired (maybe you wanted Remote Desktop sharing), you will need to experiment and try restoring Agents and Daemons one by one using the steps below.\
 You can also try deleting any related app/user plist files from `~/Library/Preferences/` and rebooting, to restore an App's defaults settings. (Eg, `rm ~/Library/Preferences/com.apple.AppStore.plist`)
 
-Restoring functionality; follow steps 1,6,7 again, removing `.bak` extension from individual .plists, restore launchctl loading if Agent, and follow steps 11-14 again (Increment 'CustomX') to commit the restored plists.
+Restoring functionality; follow steps 1,6,7 again, removing `.bak` extension from individual .plists, restore launchctl loading if Agent, and follow steps 11-14 again (Increment 'CustomX') to commit the restored plists.\
+To restore EVERYTHING at once, run `Enable-macOS-Bloatware.sh` in Recovery mode (after steps 1,6,7) - it renames all `.plist.bak` files back, restores the geod binary, and clears the launchctl override database - then follow steps 11-14.
 Eg to restore Agents;
 ```
 Steps 1,6,7
@@ -183,7 +197,7 @@ The 'Users & Groups' section in 'System Settings' appears not to work! It does..
 
 APFS Snapshots do NOT create copies of the images, they are byte deltas from the base SSV image. So you can have hundreds, they occupy negligible space and have no detectable performance impact. And there is no need to delete them (you roll them back).\
 Many MacOS packages perform multiple actions, so the groups in the script are only best effort and not guaranteed to be accurate (corrections/improvements welcome).\
-This script assumes one user account exists with UID 501. Check yours with `id` command.\
+The scripts target UID 501 by default (`TARGET_UID` variable). Check yours with the `id -u` command.\
 Even if you do not unregister the services/daemons for all user IDs the script renames the plists, so they will be disabled for all users anyway - but you may have errors in Console logs.\
 You can get more information about most Agents/Daemons with;
 ```
@@ -199,6 +213,17 @@ Disabling `com.apple.bird` will prevent saving prompts from being shown.\
 Disabling `com.apple.WebKit.PluginAgent` can cause video problems in Safari.\
 `com.apple.nsurlsessiond` invokes and handles network download requests for many applications and services on macOS (inc iOS and tvOS and watchOS) - Use LittleSnitch to control who it talks to instead.
 Disabling Daemon `com.apple.airportd` breaks Wi-Fi connectivity
+
+Sequoia-era additions (community field reports);\
+Disabling `com.apple.contactsd` freezes the App Store.\
+Disabling `com.apple.donotdisturbd` breaks Notification Center.\
+Disabling `com.apple.chronod` blanks all widgets.\
+Disabling Daemon `com.apple.dhcp6d` breaks networking after VPN disconnect until reboot.\
+Disabling Daemon `com.apple.biometrickitd` breaks Touch ID.\
+Disabling Daemon `com.apple.AirPlayXPCHelper` breaks media playback (Eg YouTube) in Safari/WebKit.\
+Disabling Daemons `com.apple.bridgeOSUpdateProxy` `com.apple.bosreporter` `com.apple.boswatcher` silently breaks macOS updates on Apple Silicon.\
+Disabling Agent-domain `com.apple.rapportd`/`com.apple.rapportd-user` breaks Screen Mirroring (the system Daemon `com.apple.rapportd` can still be disabled).\
+Disabling `com.apple.modelmanagerd` has caused sustained coreaudiod/launchd CPU spin - excluded from the Sequoia script by default.
 
 #### Privacy and Security;
 If you are doing this for improved privacy and security, rather than consistency/stability;\
