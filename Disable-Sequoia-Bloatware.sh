@@ -261,6 +261,13 @@ LA_SPOTLIGHT=('com.apple.Spotlight' \
 
 LA_AIRPLAY=('com.apple.AirPlayUIAgent')
 
+# heard = Accessibility Hearing daemon (HearingCore.framework). Not in the audio path - it is the
+# control plane for MFi/Bluetooth hearing aids, AirPods hearing features (Hearing Aid, Hearing
+# Protection, Headphone Accommodations tunings synced via CloudKit), Live Listen, Background Sounds,
+# Sound Recognition alerts and RTT call transcripts. Seen constantly using ~70% CPU.
+# It is mach-service activated with KeepAlive, so `kill` only gets it relaunched - rename the plist.
+LA_HEARING=('com.apple.accessibility.heard')
+
 # Disabling WiFiVelocityAgent does not break wifi, just stop logging your wifi network history
 LA_OTHER=('com.apple.networkserviceproxy-osx' \
 'com.apple.universalaccessd' \
@@ -298,6 +305,7 @@ TODISABLE+=( "${LA_PAYMENTS[@]}" )
 # TODISABLE+=( "${LA_AUTOMATIONS[@]}" )
 TODISABLE+=( "${LA_SPOTLIGHT[@]}" )    # Make sure you have an alternative like LaunchBar
 TODISABLE+=( "${LA_AIRPLAY[@]}" )      # Do not disable if you use AirPlay
+TODISABLE+=( "${LA_HEARING[@]}" )      # Do not disable if you use hearing aids, AirPods hearing features, Background Sounds or Sound Recognition
 TODISABLE+=( "${LA_OTHER[@]}" )
 
 for agent in "${TODISABLE[@]}"

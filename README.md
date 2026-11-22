@@ -193,7 +193,8 @@ Rollback to the original Apple MacOS Signed/sealed snapshot; `bless --mount / --
 
 #### Notes/Known Issues;
 The script disables Spotlight by default, so make sure you have an alternative Eg, LaunchBar or Alfred etc (or don't disable Spotlight).\
-The 'Users & Groups' section in 'System Settings' appears not to work! It does.. You just have to click 'Users & Groups' and wait around 5 minutes, then it will eventually appear.. User management is tied into iCloud, and you have to wait for a timeout now we have disabled all the Cloud stuff. Or Manage your users with the Terminal :)
+The 'Users & Groups' section in 'System Settings' appears not to work! It does.. You just have to click 'Users & Groups' and wait around 5 minutes, then it will eventually appear.. User management is tied into iCloud, and you have to wait for a timeout now we have disabled all the Cloud stuff. Or Manage your users with the Terminal :)\
+The Sequoia script disables `com.apple.accessibility.heard` (the Accessibility Hearing daemon, seen constantly using ~70% CPU) by default. Normal audio is unaffected, but hearing aids, AirPods hearing features (Hearing Aid, Hearing Protection, Headphone Accommodations), Live Listen, Background Sounds, Sound Recognition and RTT stop working - comment out the `LA_HEARING` line if you use any of them.
 
 APFS Snapshots do NOT create copies of the images, they are byte deltas from the base SSV image. So you can have hundreds, they occupy negligible space and have no detectable performance impact. And there is no need to delete them (you roll them back).\
 Many MacOS packages perform multiple actions, so the groups in the script are only best effort and not guaranteed to be accurate (corrections/improvements welcome).\
