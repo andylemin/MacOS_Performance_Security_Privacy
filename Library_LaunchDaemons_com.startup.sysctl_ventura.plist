@@ -33,7 +33,9 @@
             <string>net.inet.tcp.autosndbufmax=8388608</string>
             <string>net.inet.tcp.autosndbufinc=16384</string>
             <string>kern.ipc.maxsockbuf=16777216</string>
-            <string>kern.ipc.nmbclusters=524288</string>
+            <string>kern.ipc.somaxconn=2048</string>
+            <string>kern.maxvnodes=524288</string>
+            <string>kern.timer.coalescing_enabled=0</string>
         </array>
         <key>RunAtLoad</key>
         <true/>

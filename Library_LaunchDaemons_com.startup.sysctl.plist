@@ -18,11 +18,12 @@
             <string>kern.maxfiles=524288</string>
             <string>kern.maxfilesperproc=524288</string>
             <string>net.inet.tcp.mssdflt=1300</string>
-            <string>net.inet.tcp.delayed_ack=3</string>
+            <string>net.inet.tcp.delayed_ack=0</string>
             <string>net.inet.tcp.do_ack_compression=0</string>
             <string>net.inet.tcp.tso=0</string>
             <string>net.inet.tcp.cubic_fast_convergence=1</string>
             <string>net.inet.tcp.cubic_tcp_friendliness=1</string>
+            <string>net.inet.tcp.cubic_use_minrtt=0</string>
             <string>net.inet.tcp.win_scale_factor=8</string>
             <string>net.inet.tcp.local_slowstart_flightsize=12</string>
             <string>net.inet.tcp.randomize_ports=1</string>
@@ -31,10 +32,12 @@
             <string>net.inet.ip.redirect=0</string>
             <string>net.inet.tcp.recvspace=262144</string>
             <string>net.inet.tcp.sendspace=262144</string>
-            <string>net.inet.tcp.autorcvbufmax=33554432</string>
-            <string>net.inet.tcp.autosndbufmax=33554432</string>
-            <string>kern.ipc.maxsockbuf=8388608</string>
-            <string>kern.ipc.nmbclusters=262144</string>
+            <string>net.inet.tcp.autorcvbufmax=16777216</string>
+            <string>net.inet.tcp.autosndbufmax=16777216</string>
+            <string>kern.ipc.maxsockbuf=33554432</string>
+            <string>kern.ipc.somaxconn=2048</string>
+            <string>kern.maxvnodes=524288</string>
+            <string>kern.timer.coalescing_enabled=0</string>
         </array>
         <key>RunAtLoad</key>
         <true/>

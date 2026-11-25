@@ -26,3 +26,10 @@ defaults write com.apple.Mail DisableSendAnimations -bool true
 echo "# Increasing keyboard speed"
 defaults write NSGlobalDomain KeyRepeat -int 1
 defaults write NSGlobalDomain InitialKeyRepeat -int 10
+
+# Clear QuickLook Cache Periodically
+echo "Updating ~/Library/LaunchAgents/local.qlcache-reset.plist"
+cp -f ./Library_LaunchAgents_qlmanage.plist ~/Library/LaunchAgents/local.qlcache-reset.plist
+plutil -lint ~/Library/LaunchAgents/local.qlcache-reset.plist
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/local.qlcache-reset.plist
+echo

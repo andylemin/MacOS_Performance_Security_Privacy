@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Installed by MacOS_awdlkiller.sh; keeps awdl0 down (https://github.com/jamestut/awdlkiller) -->
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>jamestut.awdlkiller</string>
+        <key>Program</key>
+        <string>/usr/local/libexec/awdlkiller</string>
+        <key>RunAtLoad</key>
+        <true/>
+        <key>KeepAlive</key>
+        <true/>
+        <key>StandardErrorPath</key>
+            <string>/private/tmp/awdlkiller.err</string>
+    </dict>
+</plist>

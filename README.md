@@ -233,6 +233,13 @@ Maybe install an outbound firewall like LittleSnitch.
 Disable the awdl0 interface if you don't use Handoff/Continuity features like Universal Control, AirDrop and AirPlay etc (https://github.com/jamestut/awdlkiller).
 You can also investigate options for full cookie management/cleanup (Eg, SweetPProduction's Cookie App, and web content blockers etc).
 
+#### MDM (Mobile Device Management)
+An MDM server pushes configuration profiles and commands to enrolled Macs, which is how organisations apply settings like the ones in these scripts across many machines.\
+NB; The Disable scripts turn off Apple's MDM and profile services - comment out the `LA_MDM` and `LD_MDM` lines (and restore those services if they are already disabled) before enrolling a Mac in an MDM.
+- [NanoMDM](https://github.com/micromdm/nanomdm) - A minimalist open-source Apple MDM server and Go library driven through its HTTP API; best for technical admins and developers who want a small MDM core to script against or build their own tooling on.
+- [Fleet](https://github.com/fleetdm/fleet) - An open-source device management platform for MDM, patching, software deployment and device checks across macOS, Windows, Linux, ChromeOS and mobile devices; best for IT and security teams managing many devices on several operating systems from one place.
+- [macOS Security Compliance Project (mSCP)](https://github.com/usnistgov/macos_security) - A joint project of US federal IT security staff that turns the security rules you choose (derived from NIST SP 800-53) into configuration profiles, documentation and compliance scripts; best for organisations that must meet a security baseline and want profiles to deploy through their MDM.
+
 -----------------------------------------
 
 ### `MacOS_UI_performance.sh`
@@ -246,7 +253,15 @@ Adds Apple X-Code runtime libraries.\
 Deletes local timemachine snapshots (does not impact external disk time machine backups), and local caches\
 Deletes local temp caches and application logs\
 Warning; Disables Spotlight (make sure you have alternative like Alfred).\
-Warning; Disables awdl0 interface (Handoff/Continuity/AirDrop/AirPlay etc).
+Warning; Disables awdl0 interface (Handoff/Continuity/AirDrop/AirPlay etc).\
+Sets High Power Mode on the charger where the Mac has it, otherwise turns Low Power Mode off on the charger.
+
+### `MacOS_awdlkiller.sh`
+Installs [awdlkiller](https://github.com/jamestut/awdlkiller) as a LaunchDaemon (`Library_LaunchDaemons_jamestut.awdlkiller.plist`), which takes the awdl0 interface down the moment macOS brings it back up, so it stays down across reboots.\
+`MacOS_other_settings.sh` only takes awdl0 down until the next reboot, or until something brings it back up.\
+Builds the newest awdlkiller release from source (needs the Xcode command line tools; `xcode-select --install`), and installs it to `/usr/local/libexec`, owned by root.\
+Run it again to update; it shows what changed in a new release and asks before building.\
+Warning; While it runs, AirDrop, AirPlay, Sidecar, Universal Control and some Handoff/Continuity features do not work. The undo commands are at the top of the script.
 
 ### `MacOS_sysctl.sh`
 ('/etc/sysctl.conf' is ignored since MacOS 10.9)\
@@ -263,9 +278,11 @@ TSO) sysctl `net.inet.tcp.tso` controls the size of packets sent to the NIC.\
 On wireless networks (any lossy network) net.inet.tcp.tso=0 can perform much better and provide lower latency, as the network stack is more intelligent that the NIC. But will be slower on wired.\
 On wired networks (lossless network), you can reliably let the NIC handle splitting frames.
 
-Clusters) sysctl `kern.ipc.nmbclusters` controls the size/number of buffers available for networking.\
-Increasing this value can significantly improve performance, but increases memory usage. Try 262144 first and increase conservatively.
-Many guides on the internet suggest to increase this to very large numbers, this is wrong. 262144 will provide 10Gbps easily.
+Clusters) `kern.ipc.nmbclusters` is the size of the network buffer pool, in 2KB clusters. It is read-only at run time: the kernel sizes it at boot from RAM (65536 at 8-16GB, 131072 at 16-32GB, 262144 at 32GB+), or from the `ncl=` boot argument.\
+`MacOS_sysctl.sh` offers to set `ncl=` to the kernel's maximum (1048576, a 2GB pool), but never more than 1/16 of RAM, the largest share in Apple's own table (262144 at 8GB, 524288 at 16GB, the maximum from 32GB).\
+The pool is a limit: the kernel reserves 1/64 to 1/32 of it at boot (at most 64MB for a 2GB pool) and uses the rest only under load. Under load TCP drops out-of-order segments once the pool is nearly full ("dropped due to low memory" in `netstat -s -p tcp`), so a bigger pool keeps them during loss recovery.\
+The pool also caps `kern.ipc.maxsockbuf` at nmbclusters x 128 bytes. The plists keep maxsockbuf = autorcvbufmax + autosndbufmax, and the script warns if the pool cannot cover it.\
+NB; Apple Silicon may filter `ncl=` out of boot-args (iBoot applies its allow list unless the LocalPolicy sip3 field is set) - check the read-only `sysctl kern.ipc.nmbclusters` after the reboot.
 
 Delayed ACK) sysctl `net.inet.tcp.delayed_ack` controls how ACKs are sent.\
 http://www.stuartcheshire.org/papers/NagleDelayedAck/ \
@@ -280,3 +297,9 @@ data instead. Therefore, on wireless network delayed_ack=1 or 3 is preferred (we
 For high speed wired networks however, this ACK delay can restrict upper performance, and so delayed_ack=0 or 2 is preferred.
 
 I have not been able to confirm if 3 (auto) is able to apply the correct ACK delay mode depending on the network interface being used. It would be great if it could.
+
+Timer coalescing) `kern.timer.coalescing_enabled=0` stops the kernel adding coalescing slack to timers, so timers fire closer to their deadlines. Less jitter for timing-sensitive tests, at the cost of more CPU wake-ups and power use.
+
+Vnodes) `kern.maxvnodes=524288` raises the limit on cached file objects (vnodes) from the default (RAM/64KB + 1024, capped at 263168), which helps builds and tools that walk large source trees. The memory is used only for files actually cached.
+
+Listen backlog) `kern.ipc.somaxconn=2048` raises the listen queue limit from 128, as the kernel clamps every listen() backlog to it. Useful for local server load tests.

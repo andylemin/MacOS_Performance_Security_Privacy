@@ -128,7 +128,7 @@ for app in Finder Dock SystemUIServer Safari Mail; do killall "$app"; done
 echo
 echo "# Shutting 'Apple Wireless Direct Link' Interface (Handoff/Continuity/AirDrop/AirPlay etc)"
 sudo ifconfig awdl0 down
-echo "To make AirDrop Interface disable permanent. See; https://github.com/jamestut/awdlkiller"
+echo "To keep awdl0 down across reboots, run ./MacOS_awdlkiller.sh (installs https://github.com/jamestut/awdlkiller as a LaunchDaemon)"
 
 echo
 echo "# Installing Powerline fonts"
@@ -189,7 +189,7 @@ echo "# Cleaning syslog and aslmanager"
 
 # Disable Sleep
 echo
-echo "# Configuring Power (Disable Autopoweroff (hibernation), Powernap (dont wake), Standby, Proximitywake, TCPKeepalive)"
+echo "# Configuring Power (Disable Autopoweroff (hibernation), Powernap (dont wake), Standby, Proximitywake, TCPKeepalive; High Power Mode on the charger)"
 echo "# Enabling MacOS sleep - light sleep and powernap modes can break many workstation workloads (Disable on workstation, leave enabled on laptop)"
 /usr/bin/sudo pmset -a disablesleep 0
 # Enable sleep with 0, Disable sleep with 1
@@ -198,6 +198,12 @@ echo "# Enabling MacOS sleep - light sleep and powernap modes can break many wor
 /usr/bin/sudo pmset -a standby 0
 /usr/bin/sudo pmset -a proximitywake 0
 /usr/bin/sudo pmset -a tcpkeepalive 0
+# High Power Mode on the charger where the Mac has it ('pmset -g' then lists 'powermode'; 0 automatic, 1 low, 2 high);
+# on other Macs, at least turn Low Power Mode off on the charger
+if ! /usr/bin/sudo pmset -c powermode 2 2>/dev/null; then
+    /usr/bin/sudo pmset -c lowpowermode 0 2>/dev/null || echo "This Mac has no Low or High Power Mode setting - skipping"
+fi
+pmset -g | grep -E 'powermode'
 
 echo
 echo "# SSD TRIM"
